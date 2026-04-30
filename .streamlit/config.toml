@@ -3,9 +3,5 @@
 # filesystem, ce qui crashe le tri quand les fichiers sont déplacés.
 fileWatcherType = "none"
 
-# Pas de timeout sur l'exécution du script — nécessaire pour les gros lots
-# de photos (1000+ images peuvent dépasser 60s de traitement)
-scriptRunTimeoutSeconds = 0
-
 [browser]
 gatherUsageStats = false

@@ -266,8 +266,7 @@ if run_clicked and ok:
     with st.spinner(spinner_label):
         t0 = time.monotonic()
         for idx, img_path in enumerate(images, 1):
-            if idx == 1 or idx % 100 == 0:
-                _log("debug", "Processing image %d/%d — %s", idx, len(images), img_path.name)
+            _log("debug", "IMG %d/%d — %s", idx, len(images), img_path.name)
             try:
                 sig = extract_signature(img_path)
                 decision, best_cls, best_score, runner_cls, runner_score = classify(
@@ -283,7 +282,6 @@ if run_clicked and ok:
                         dest_dir = folder / decision
                         dest_dir.mkdir(exist_ok=True)
                         dest = dest_dir / img_path.name
-                        # copy2 préserve les métadonnées EXIF/dates
                         if mode == "move":
                             shutil.move(str(img_path), str(dest))
                         else:
@@ -312,8 +310,15 @@ if run_clicked and ok:
                 })
                 log_lines.append(f"{tag} | {img_path.name} | {detail}")
 
-            except Exception:
+            except BaseException as exc:
+                exc_type = type(exc).__name__
                 tb = traceback.format_exc()
+                # RerunException / StopException = Streamlit veut redémarrer le script.
+                # On log pour diagnostiquer puis on laisse propager.
+                if exc_type in ("RerunException", "StopException", "StopIteration"):
+                    _log("critical", "STREAMLIT CONTROL EXCEPTION in loop — type=%s | img=%s",
+                         exc_type, img_path.name)
+                    raise
                 counts["errors"] += 1
                 log_lines.append(f"ERROR | {img_path.name} | {tb.splitlines()[-1]}")
                 results.append({
