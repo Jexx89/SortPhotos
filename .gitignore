@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+
+# Photos à trier (non versionnées — volumineuses)
+TO_SORT/
+
+# Dossiers de sortie (générés par le script)
+Electrique/
+Thermique/
+unknown/
+
+# Trash locale
+___trash/
+
+# PyInstaller
+*.spec
+*.exe
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
