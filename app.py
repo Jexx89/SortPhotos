@@ -66,7 +66,7 @@ with st.sidebar:
             key=f"cls_files_{i}",
         )
 
-    st.button("+ Ajouter une classe", on_click=add_class, use_container_width=True)
+    st.button("+ Ajouter une classe", on_click=add_class, width="stretch")
 
     st.divider()
     st.subheader("Options")
@@ -98,7 +98,7 @@ def _validate() -> tuple[bool, str]:
 
 col_btn, col_info = st.columns([2, 5])
 with col_btn:
-    run_clicked = st.button("Lancer le tri", type="primary", use_container_width=True)
+    run_clicked = st.button("Lancer le tri", type="primary", width="stretch")
 
 ok, err_msg = _validate()
 if run_clicked and not ok:
@@ -151,7 +151,7 @@ if run_clicked and ok:
             for uf in cls["files"][:3]:
                 uf.seek(0)
                 # width=None → Streamlit choisit une taille adaptée au conteneur
-                st.image(Image.open(uf), width=None)
+                st.image(Image.open(uf), width="stretch")
 
     st.divider()
     st.subheader("Traitement" + (" (simulation)" if dry_run else ""))
