@@ -247,82 +247,76 @@ if run_clicked and ok:
     counts: dict[str, int] = defaultdict(int)
     scores_by_class: dict[str, list[float]] = defaultdict(list)
     log_lines: list[str] = []
-    t0 = time.monotonic()
 
     _log("info", "Processing loop START — %d images", len(images))
 
-    for idx, img_path in enumerate(images, 1):
-        if idx == 1 or idx % 100 == 0:
-            _log("debug", "Processing image %d/%d — %s", idx, len(images), img_path.name)
-        try:
-            sig = extract_signature(img_path)
-            decision, best_cls, best_score, runner_cls, runner_score = classify(
-                sig, references, threshold, margin
-            )
-            scores_by_class[best_cls].append(best_score)
+    # Tout le traitement dans un st.spinner — AUCUN appel Streamlit à l'intérieur.
+    # Les appels progress/text en cours de loop déclenchaient des RerunException
+    # qui interrompaient le script et laissaient les fichiers à moitié déplacés.
+    spinner_label = f"{'Simulation' if dry_run else 'Tri'} en cours — {len(images)} images…"
+    with st.spinner(spinner_label):
+        t0 = time.monotonic()
+        for idx, img_path in enumerate(images, 1):
+            if idx == 1 or idx % 100 == 0:
+                _log("debug", "Processing image %d/%d — %s", idx, len(images), img_path.name)
+            try:
+                sig = extract_signature(img_path)
+                decision, best_cls, best_score, runner_cls, runner_score = classify(
+                    sig, references, threshold, margin
+                )
+                scores_by_class[best_cls].append(best_score)
 
-            if decision is not None:
-                counts["matched"] += 1
-                tag = "MATCH"
-                detail = f"{decision} | score={best_score:.4f} | runner={runner_cls}@{runner_score:.4f}"
-                if not dry_run:
-                    dest_dir = folder / decision
-                    dest_dir.mkdir(exist_ok=True)
-                    dest = dest_dir / img_path.name
-                    # copy2 préserve les métadonnées EXIF/dates
-                    if mode == "move":
-                        shutil.move(str(img_path), str(dest))
-                    else:
-                        shutil.copy2(str(img_path), str(dest))
-            else:
-                counts["unknown"] += 1
-                tag = "UNKNOWN"
-                reason = "above_threshold" if best_score > threshold else "ambiguous"
-                detail = f"best={best_cls}@{best_score:.4f} | {reason}"
-                decision = "unknown"
-                if not dry_run:
-                    unk_dir = folder / "unknown"
-                    unk_dir.mkdir(exist_ok=True)
-                    dest = unk_dir / img_path.name
-                    if mode == "move":
-                        shutil.move(str(img_path), str(dest))
-                    else:
-                        shutil.copy2(str(img_path), str(dest))
+                if decision is not None:
+                    counts["matched"] += 1
+                    tag = "MATCH"
+                    detail = f"{decision} | score={best_score:.4f} | runner={runner_cls}@{runner_score:.4f}"
+                    if not dry_run:
+                        dest_dir = folder / decision
+                        dest_dir.mkdir(exist_ok=True)
+                        dest = dest_dir / img_path.name
+                        # copy2 préserve les métadonnées EXIF/dates
+                        if mode == "move":
+                            shutil.move(str(img_path), str(dest))
+                        else:
+                            shutil.copy2(str(img_path), str(dest))
+                else:
+                    counts["unknown"] += 1
+                    tag = "UNKNOWN"
+                    reason = "above_threshold" if best_score > threshold else "ambiguous"
+                    detail = f"best={best_cls}@{best_score:.4f} | {reason}"
+                    decision = "unknown"
+                    if not dry_run:
+                        unk_dir = folder / "unknown"
+                        unk_dir.mkdir(exist_ok=True)
+                        dest = unk_dir / img_path.name
+                        if mode == "move":
+                            shutil.move(str(img_path), str(dest))
+                        else:
+                            shutil.copy2(str(img_path), str(dest))
 
-            results.append({
-                "Fichier": img_path.name,
-                "Classe": decision,
-                "Score": round(best_score, 4),
-                "Runner-up": f"{runner_cls}@{runner_score:.4f}",
-                "Statut": tag,
-            })
-            log_lines.append(f"{tag} | {img_path.name} | {detail}")
+                results.append({
+                    "Fichier": img_path.name,
+                    "Classe": decision,
+                    "Score": round(best_score, 4),
+                    "Runner-up": f"{runner_cls}@{runner_score:.4f}",
+                    "Statut": tag,
+                })
+                log_lines.append(f"{tag} | {img_path.name} | {detail}")
 
-        except BaseException as exc:
-            # BaseException catch Streamlit's StopException + KeyboardInterrupt
-            # que except Exception ne capture pas
-            tb = traceback.format_exc()
-            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
-                _log("critical", "Process interrupted at image %d/%d:\n%s", idx, len(images), tb)
-                raise
-            counts["errors"] += 1
-            log_lines.append(f"ERROR | {img_path.name} | {tb.splitlines()[-1]}")
-            results.append({
-                "Fichier": img_path.name, "Classe": "ERROR",
-                "Score": None, "Runner-up": "", "Statut": "ERROR",
-            })
-            _log("error", "Image processing FAILED for %s:\n%s", img_path.name, tb)
+            except Exception:
+                tb = traceback.format_exc()
+                counts["errors"] += 1
+                log_lines.append(f"ERROR | {img_path.name} | {tb.splitlines()[-1]}")
+                results.append({
+                    "Fichier": img_path.name, "Classe": "ERROR",
+                    "Score": None, "Runner-up": "", "Statut": "ERROR",
+                })
+                _log("error", "Image processing FAILED for %s:\n%s", img_path.name, tb)
 
-        # Mise à jour UI toutes les 10 images pour limiter la charge WebSocket
-        if idx % 10 == 0 or idx == len(images):
-            progress.progress(idx / len(images), text=f"{idx}/{len(images)} — {img_path.name}")
-            log_placeholder.text("\n".join(log_lines[-12:]))
+        duration = time.monotonic() - t0
 
-    duration = time.monotonic() - t0
-    progress.empty()
-    log_placeholder.empty()
-
-    _log("info", "Processing loop END — duration=%.1fs", duration)
+    _log("info", "Processing loop END — duration=%.1fs | matched=%d | unknown=%d | errors=%d",
+         duration, counts["matched"], counts["unknown"], counts["errors"])
     _log("info", "RUN END | matched=%d | unknown=%d | errors=%d | duration=%.1fs",
          counts["matched"], counts["unknown"], counts["errors"], duration)
 
