@@ -218,6 +218,9 @@ if run_clicked and ok:
             st.stop()
 
     # Aperçu des images de référence
+    # On passe les bytes bruts à st.image plutôt qu'un objet PIL —
+    # Image.open() est lazy et garde le UploadedFile ouvert, ce qui cause
+    # un crash C-level quand Streamlit essaie de lire les pixels après le read().
     st.subheader("Références")
     ref_cols = st.columns(len(valid_classes))
     for col, cls in zip(ref_cols, valid_classes):
@@ -226,7 +229,10 @@ if run_clicked and ok:
             for uf in cls["files"][:3]:
                 try:
                     uf.seek(0)
-                    st.image(Image.open(uf), width="stretch")
+                    img_bytes = uf.read()
+                    _log("debug", "Displaying thumbnail for %s (%d bytes)", cls["name"], len(img_bytes))
+                    st.image(img_bytes, width="stretch")
+                    _log("debug", "Thumbnail OK for %s", cls["name"])
                 except Exception:
                     _log("warning", "Could not display thumbnail for %s: %s",
                          cls["name"], traceback.format_exc().splitlines()[-1])
