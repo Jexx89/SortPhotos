@@ -1,8 +1,11 @@
 [server]
-# Désactive le file watcher — il surveille les changements du filesystem et
-# redémarre le serveur s'il en détecte. Comme on déplace des fichiers dans
-# le dossier du projet, ça provoque un crash pendant le tri.
+# Désactive le file watcher — il redémarre le serveur sur tout changement
+# filesystem, ce qui crashe le tri quand les fichiers sont déplacés.
 fileWatcherType = "none"
+
+# Pas de timeout sur l'exécution du script — nécessaire pour les gros lots
+# de photos (1000+ images peuvent dépasser 60s de traitement)
+scriptRunTimeoutSeconds = 0
 
 [browser]
 gatherUsageStats = false

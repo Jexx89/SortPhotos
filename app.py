@@ -249,7 +249,11 @@ if run_clicked and ok:
     log_lines: list[str] = []
     t0 = time.monotonic()
 
+    _log("info", "Processing loop START — %d images", len(images))
+
     for idx, img_path in enumerate(images, 1):
+        if idx == 1 or idx % 100 == 0:
+            _log("debug", "Processing image %d/%d — %s", idx, len(images), img_path.name)
         try:
             sig = extract_signature(img_path)
             decision, best_cls, best_score, runner_cls, runner_score = classify(
@@ -294,8 +298,13 @@ if run_clicked and ok:
             })
             log_lines.append(f"{tag} | {img_path.name} | {detail}")
 
-        except Exception:
+        except BaseException as exc:
+            # BaseException catch Streamlit's StopException + KeyboardInterrupt
+            # que except Exception ne capture pas
             tb = traceback.format_exc()
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                _log("critical", "Process interrupted at image %d/%d:\n%s", idx, len(images), tb)
+                raise
             counts["errors"] += 1
             log_lines.append(f"ERROR | {img_path.name} | {tb.splitlines()[-1]}")
             results.append({
@@ -313,6 +322,7 @@ if run_clicked and ok:
     progress.empty()
     log_placeholder.empty()
 
+    _log("info", "Processing loop END — duration=%.1fs", duration)
     _log("info", "RUN END | matched=%d | unknown=%d | errors=%d | duration=%.1fs",
          counts["matched"], counts["unknown"], counts["errors"], duration)
 
@@ -320,6 +330,7 @@ if run_clicked and ok:
 
     st.divider()
     st.subheader("Résultats")
+    _log("debug", "Rendering results — %d rows", len(results))
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total", len(images))
