@@ -21,8 +21,7 @@ from classifier import build_references, classify, extract_signature
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
 
 # ── Logging applicatif ───────────────────────────────────────────────────────
-# Écrit dans log/app.log — chaque run Streamlit append au même fichier.
-# Permet de diagnostiquer les crashs WebSocket invisibles dans l'UI.
+import os as _os
 
 _LOG_DIR = Path(__file__).parent / "log"
 _LOG_DIR.mkdir(exist_ok=True)
@@ -32,14 +31,27 @@ _log_fmt = logging.Formatter(
     "%(asctime)s | %(levelname)-8s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+
+
+class _SyncFileHandler(logging.FileHandler):
+    """FileHandler qui force un fsync après chaque émission.
+    Sans ça, le cache OS conserve les entrées en mémoire et un crash C-level
+    les efface avant qu'elles soient écrites sur disque."""
+    def emit(self, record):
+        super().emit(record)
+        try:
+            _os.fsync(self.stream.fileno())
+        except Exception:
+            pass
+
+
 _app_logger = logging.getLogger("sortphotos.app")
-# Évite les handlers dupliqués lors des re-runs Streamlit (le module est rechargé mais
-# les loggers Python persistent dans le process)
 if not _app_logger.handlers:
-    _fh = logging.FileHandler(_LOG_FILE, encoding="utf-8")
+    _fh = _SyncFileHandler(_LOG_FILE, encoding="utf-8")
     _fh.setFormatter(_log_fmt)
     _app_logger.addHandler(_fh)
     _app_logger.setLevel(logging.DEBUG)
+
 
 def _log(level: str, msg: str, *args) -> None:
     getattr(_app_logger, level)(msg, *args)
@@ -240,9 +252,6 @@ if run_clicked and ok:
     st.divider()
     st.subheader("Traitement" + (" (simulation)" if dry_run else ""))
 
-    progress = st.progress(0, text="Initialisation...")
-    log_placeholder = st.empty()
-
     results: list[dict] = []
     counts: dict[str, int] = defaultdict(int)
     scores_by_class: dict[str, list[float]] = defaultdict(list)
@@ -332,17 +341,28 @@ if run_clicked and ok:
               delta=f"{counts['matched'] / len(images) * 100:.1f}%")
     m3.metric("Unknown", counts["unknown"])
     m4.metric("Durée", f"{duration:.1f}s")
+    _log("debug", "Metrics rendered OK")
 
+    # Les None dans Score (images en erreur) doivent être convertis sinon
+    # NumberColumn crashe au niveau de la sérialisation protobuf Streamlit.
+    for r in results:
+        if r["Score"] is None:
+            r["Score"] = float("nan")
+
+    _log("debug", "Rendering dataframe...")
     st.dataframe(
         results,
+        use_container_width=True,
         column_config={
             "Score": st.column_config.NumberColumn(format="%.4f"),
             "Statut": st.column_config.TextColumn(width="small"),
         },
     )
+    _log("debug", "Dataframe rendered OK")
 
     # Distribution des scores — aide à calibrer threshold et margin
     if scores_by_class:
+        _log("debug", "Rendering score distribution — %d classes", len(scores_by_class))
         st.subheader("Distribution des scores")
         dist_cols = st.columns(len(scores_by_class))
         for col, (cls_name, scores) in zip(dist_cols, sorted(scores_by_class.items())):
@@ -351,10 +371,13 @@ if run_clicked and ok:
             with col:
                 st.write(f"**{cls_name}** — n={len(arr)}")
                 st.write(f"min={arr.min():.4f} | mean={arr.mean():.4f} | max={arr.max():.4f}")
-                st.bar_chart({"score": hist_counts}, height=150)
+                st.bar_chart({"score": hist_counts})
+        _log("debug", "Score distribution rendered OK")
 
+    _log("debug", "Rendering log expander...")
     with st.expander("Log complet"):
         st.text("\n".join(log_lines))
+    _log("debug", "Log expander rendered OK")
 
     # Écriture du log fichier — append pour conserver l'historique des runs
     log_file = folder / "sort_photos.log"
