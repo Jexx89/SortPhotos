@@ -1,0 +1,8 @@
+[server]
+# Désactive le file watcher — il surveille les changements du filesystem et
+# redémarre le serveur s'il en détecte. Comme on déplace des fichiers dans
+# le dossier du projet, ça provoque un crash pendant le tri.
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
