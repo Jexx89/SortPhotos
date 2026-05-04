@@ -20,6 +20,19 @@ from classifier import build_references, classify, extract_signature
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
 
+
+def _safe_dest(dest: Path) -> Path:
+    """Return dest unchanged if it doesn't exist, else dest_001, dest_002, …"""
+    if not dest.exists():
+        return dest
+    stem, suffix = dest.stem, dest.suffix
+    i = 1
+    while True:
+        candidate = dest.with_name(f"{stem}_{i:03d}{suffix}")
+        if not candidate.exists():
+            return candidate
+        i += 1
+
 # ── Logging applicatif ───────────────────────────────────────────────────────
 import os as _os
 
@@ -259,14 +272,21 @@ if run_clicked and ok:
 
     _log("info", "Processing loop START — %d images", len(images))
 
-    # Tout le traitement dans un st.spinner — AUCUN appel Streamlit à l'intérieur.
-    # Les appels progress/text en cours de loop déclenchaient des RerunException
-    # qui interrompaient le script et laissaient les fichiers à moitié déplacés.
+    # st.empty() permet de mettre à jour le texte de progression depuis l'intérieur
+    # du loop SANS déclencher de rerun (contrairement à st.progress/st.write).
+    progress_placeholder = st.empty()
+
+    # Tout le traitement dans un st.spinner — pas d'autres appels Streamlit dedans
+    # sauf progress_placeholder.text() qui est safe (push DOM sans rerun).
     spinner_label = f"{'Simulation' if dry_run else 'Tri'} en cours — {len(images)} images…"
     with st.spinner(spinner_label):
         t0 = time.monotonic()
         for idx, img_path in enumerate(images, 1):
             _log("debug", "IMG %d/%d — %s", idx, len(images), img_path.name)
+            if idx % 10 == 0 or idx == 1:
+                progress_placeholder.text(
+                    f"{'Simulation' if dry_run else 'Tri'} : {idx}/{len(images)} — {img_path.name}"
+                )
             try:
                 sig = extract_signature(img_path)
                 decision, best_cls, best_score, runner_cls, runner_score = classify(
@@ -281,7 +301,7 @@ if run_clicked and ok:
                     if not dry_run:
                         dest_dir = folder / decision
                         dest_dir.mkdir(exist_ok=True)
-                        dest = dest_dir / img_path.name
+                        dest = _safe_dest(dest_dir / img_path.name)
                         if mode == "move":
                             shutil.move(str(img_path), str(dest))
                         else:
@@ -295,7 +315,7 @@ if run_clicked and ok:
                     if not dry_run:
                         unk_dir = folder / "unknown"
                         unk_dir.mkdir(exist_ok=True)
-                        dest = unk_dir / img_path.name
+                        dest = _safe_dest(unk_dir / img_path.name)
                         if mode == "move":
                             shutil.move(str(img_path), str(dest))
                         else:

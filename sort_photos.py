@@ -94,6 +94,19 @@ def _collect_images(folder: Path) -> list[Path]:
     )
 
 
+def _safe_dest(dest: Path) -> Path:
+    """Return dest unchanged if it doesn't exist, else dest_001, dest_002, …"""
+    if not dest.exists():
+        return dest
+    stem, suffix = dest.stem, dest.suffix
+    i = 1
+    while True:
+        candidate = dest.with_name(f"{stem}_{i:03d}{suffix}")
+        if not candidate.exists():
+            return candidate
+        i += 1
+
+
 def _parse_example(value: str) -> tuple[str, list[str]]:
     if "=" not in value:
         raise argparse.ArgumentTypeError(f"Expected NAME=PATH, got: {value}")
@@ -167,7 +180,7 @@ def main() -> None:
                 if not args.dry_run:
                     dest_dir = sort_folder / decision
                     dest_dir.mkdir(exist_ok=True)
-                    dest = dest_dir / img_path.name
+                    dest = _safe_dest(dest_dir / img_path.name)
                     if args.mode == "move":
                         shutil.move(str(img_path), str(dest))
                     else:
@@ -182,7 +195,7 @@ def main() -> None:
                 if not args.dry_run:
                     unk_dir = sort_folder / "unknown"
                     unk_dir.mkdir(exist_ok=True)
-                    dest = unk_dir / img_path.name
+                    dest = _safe_dest(unk_dir / img_path.name)
                     if args.mode == "move":
                         shutil.move(str(img_path), str(dest))
                     else:

@@ -2,6 +2,9 @@
 # Désactive le file watcher — il redémarre le serveur sur tout changement
 # filesystem, ce qui crashe le tri quand les fichiers sont déplacés.
 fileWatcherType = "none"
+# Désactive le timeout de script — les gros batches (>100 images sur SD card)
+# dépassent le timeout par défaut et tuent silencieusement la session.
+scriptRunTimeoutSeconds = 0
 
 [browser]
 gatherUsageStats = false
